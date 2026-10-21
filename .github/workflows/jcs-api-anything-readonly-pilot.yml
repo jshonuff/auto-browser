@@ -1,0 +1,50 @@
+name: JC-SAVAGE API Anything Read-Only Pilot
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-api-anything-readonly-pilot.yml
+permissions:
+  contents: read
+jobs:
+  isolated-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PIN: '20cb677039fcfe92d3d9c777aa9362e30ff1fdb8'
+      JCS_PRODUCTION_DISPATCH: 'false'
+      JCS_SUPABASE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Install pinned upstream, scripts disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --no-checkout https://github.com/goodnight000/api-anything.git "$RUNNER_TEMP/api-anything-src"
+          cd "$RUNNER_TEMP/api-anything-src"
+          git checkout --quiet "$PIN"
+          test "$(git rev-parse HEAD)" = "$PIN"
+          node -e 'const fs=require("fs");const s=JSON.parse(fs.readFileSync("sites/hacker-news.json"));const o=s.operations.find(x=>x.name==="frontPage");if(!o||o.request.method!=="GET"||o.request.url!=="https://news.ycombinator.com/"||!o.readOnly||o.learnedLoggedIn||o.minTier!==1||o.slots.length)process.exit(1)'
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/tsc -p tsconfig.build.json
+      - name: Check dependency advisories without failing experiment
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/api-anything-src"
+          npm audit --omit=dev --audit-level=high --json > "$RUNNER_TEMP/npm-audit.json" || true
+          node -e 'let x=require(process.env.RUNNER_TEMP+"/npm-audit.json");console.log("JCS_NPM_AUDIT "+JSON.stringify({metadata:x.metadata?.vulnerabilities??null,error:x.error?.code??null}))'
+      - name: Compare five public API vs browser reads
+        shell: bash
+        env:
+          API_ANYTHING_HOME: ${{ runner.temp }}/jcs-ephemeral-api-anything
+        run: |
+          set -euo pipefail
+          mkdir -p "$API_ANYTHING_HOME"
+          chmod 700 "$API_ANYTHING_HOME"
+          cp pilot/bench.mjs "$RUNNER_TEMP/api-anything-src/bench.mjs"
+          cd "$RUNNER_TEMP/api-anything-src"
+          node bench.mjs
