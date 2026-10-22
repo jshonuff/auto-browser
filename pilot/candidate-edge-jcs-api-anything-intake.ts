@@ -23,23 +23,24 @@ const trustedEnvironment='jcs-muncher-intake-approved';
 const commit='20cb677039fcfe92d3d9c777aa9362e30ff1fdb8';
 const fixedUrl='https://news.ycombinator.com/';
 const host='token.actions.githubusercontent.com';
-const asString=x=>typeof x==='string'?x:'';
+const asString=(x:unknown)=>typeof x==='string'?x:'';
 const timeNow=()=>Math.floor(Date.now()/1000);
 const enc=new TextEncoder();
 
 class Reject extends Error {
-  constructor(code,status=403){super(code);this.code=code;this.status=status;}
+  code: string; status: number;
+  constructor(code:string,status=403){super(code);this.code=code;this.status=status;}
 }
-function decodeBase64url(part){
+function decodeBase64url(part:string){
   if(!/^[A-Za-z0-9_-]+$/.test(part))throw new Reject('INVALID_TOKEN_BASE64');
   const padded=part.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-part.length%4)%4);
   return Uint8Array.from(atob(padded),x=>x.charCodeAt(0));
 }
-function parsePart(part){
+function parsePart(part:string): Record<string,any> {
  try{return JSON.parse(new TextDecoder().decode(decodeBase64url(part)))}
  catch{throw new Reject('INVALID_TOKEN_JSON')}
 }
-async function verifyGithubOIDC(jwt){
+async function verifyGithubOIDC(jwt:string){
  if(jwt.length>8500)throw new Reject('TOKEN_TOO_LONG');
  const parts=jwt.split('.');
  if(parts.length!==3)throw new Reject('INVALID_TOKEN_FORMAT');
@@ -77,8 +78,8 @@ async function verifyGithubOIDC(jwt){
     !/^\d{5,}$/.test(asString(claims.run_id)))throw new Reject('WORKFLOW_NOT_APPROVED');
  return claims;
 }
-const textValid=(x,n=500)=>typeof x==='string'&&x.length>0&&x.length<=n;
-function validateEnvelope(b,claims){
+const textValid=(x:unknown,n=500)=>typeof x==='string'&&x.length>0&&x.length<=n;
+function validateEnvelope(b:Record<string,any>,claims:Record<string,any>){
  if(!b||typeof b!=='object'||Array.isArray(b))throw new Reject('BODY_NOT_OBJECT',400);
  const hash=asString(b.checksum_sha256);
  if(b.schema_version!==1||b.site!=='hacker-news'||b.operation!=='frontPage'||
@@ -99,7 +100,7 @@ function validateEnvelope(b,claims){
     !textValid(b.source_id,120)||!textValid(b.evidence_lineage,500))throw new Reject('PROVENANCE_MISMATCH',400);
  return {sourceId,sourcePointer:fixedUrl,rawLine:expectedLine,lineage,processingKey:b.processing_key};
 }
-function jsonReply(code,payload){return new Response(JSON.stringify(payload),{status:code,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
+function jsonReply(code:number,payload:Record<string,unknown>){return new Response(JSON.stringify(payload),{status:code,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
 
 Deno.serve(async request=>{
  if(request.method!=='POST')return jsonReply(405,{error:'POST_ONLY'});
