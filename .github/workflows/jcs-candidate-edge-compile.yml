@@ -5,6 +5,7 @@ on:
       - jc-savage/pilot-api-anything-20261021
     paths:
       - .github/workflows/jcs-candidate-edge-compile.yml
+      - pilot/candidate-edge-jcs-api-anything-intake.ts
 permissions:
   contents: read
 jobs:
