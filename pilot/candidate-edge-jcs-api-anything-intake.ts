@@ -74,7 +74,7 @@ async function verifyGithubOIDC(jwt:string){
     (claims.nbf!==undefined&&claims.nbf>now+45))throw new Reject('OIDC_EXPIRED');
  if(claims.repository!==repo||String(claims.repository_id)!==repoId||
     claims.ref!==ref||claims.workflow_ref!==workflowRef||
-    claims.event_name!=='workflow_dispatch'||claims.environment!==trustedEnvironment||
+    claims.event_name!=='push'||claims.environment!==trustedEnvironment||
     !/^\d{5,}$/.test(asString(claims.run_id)))throw new Reject('WORKFLOW_NOT_APPROVED');
  return claims;
 }
