@@ -1,0 +1,29 @@
+name: JC-SAVAGE Edge Intake Auth Rejection Check
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-edge-auth-rejection.yml
+permissions:
+  contents: read
+jobs:
+  reject-unauthorized:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify deployed Edge Function refuses unauthorized requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://vxubjwmiizjyrxuflxhu.supabase.co/functions/v1/jcs-api-anything-intake"
+          actual=$(curl --silent --show-error --max-time 20 -o /dev/null -w "%{http_code}" "$base")
+          echo "JCS_EDGE_GET_STATUS=$actual"
+          test "$actual" = 405
+          actual=$(curl --silent --show-error --max-time 20 -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -d '{}' "$base")
+          echo "JCS_EDGE_ANONYMOUS_POST_STATUS=$actual"
+          test "$actual" = 401
+          actual=$(curl --silent --show-error --max-time 20 -o /dev/null -w "%{http_code}" -X POST -H 'Content-Type: application/json' -H 'Authorization: Bearer invalid.jwt.value' -d '{}' "$base")
+          echo "JCS_EDGE_INVALID_IDENTITY_STATUS=$actual"
+          test "$actual" = 403
+          echo 'JCS_EDGE_AUTH_REJECTION_PASS: no credentials, no database writes'
