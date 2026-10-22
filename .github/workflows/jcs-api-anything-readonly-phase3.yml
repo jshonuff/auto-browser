@@ -1,0 +1,75 @@
+name: JC-SAVAGE API Anything Phase 3 Safe Dependency Check
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-api-anything-readonly-phase3.yml
+permissions:
+  contents: read
+jobs:
+  patch-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PIN: '20cb677039fcfe92d3d9c777aa9362e30ff1fdb8'
+      JCS_PRODUCTION_DISPATCH: 'false'
+      JCS_SUPABASE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.16.0'
+      - name: Pin upstream and apply temporary exact-version dependency override
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --no-checkout https://github.com/goodnight000/api-anything.git "$RUNNER_TEMP/api-anything-src"
+          cd "$RUNNER_TEMP/api-anything-src"
+          git checkout --quiet "$PIN"
+          test "$(git rev-parse HEAD)" = "$PIN"
+          node - <<'NODE'
+          const s=JSON.parse(require('fs').readFileSync('sites/hacker-news.json','utf8'));
+          const o=s.operations.find(x=>x.name==='frontPage');
+          if(!o||o.request.url!=='https://news.ycombinator.com/'||o.request.method!=='GET'||!o.readOnly||o.learnedLoggedIn||o.minTier!==1||o.slots.length)process.exit(1);
+          NODE
+          npm pkg set "overrides.hono=4.13.11"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
+          node - <<'NODE'
+          const j=require('./package-lock.json');
+          const v=j.packages['node_modules/hono'].version;
+          if(v!=='4.13.11')throw Error('Hono upgrade did not pin: '+v);
+          console.log('JCS_PATCH_VERSION '+JSON.stringify({hono:v,sourceCommit:process.env.PIN,persistent:false}));
+          NODE
+          ./node_modules/.bin/tsc -p tsconfig.build.json
+      - name: Check for remaining production advisories
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/api-anything-src"
+          npm audit --omit=dev --json > "$RUNNER_TEMP/jcs-phase3-audit.json" || true
+          node - <<'NODE'
+          const x=require(process.env.RUNNER_TEMP+'/jcs-phase3-audit.json');
+          const v=Object.entries(x.vulnerabilities||{}).map(([name,info])=>({name,severity:info.severity}));
+          console.log('JCS_PHASE3_AUDIT '+JSON.stringify({totals:x.metadata?.vulnerabilities,vulnerabilities:v,error:x.error?.code||null}));
+          if(x.error)process.exit(2);
+          if((x.metadata?.vulnerabilities?.high||0)>0 || (x.metadata?.vulnerabilities?.critical||0)>0)process.exit(3);
+          NODE
+      - name: Regression smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/api-anything-src"
+          node --import tsx --test test/http.test.ts test/mcp.test.ts test/execute.test.ts
+      - name: Live public read-only benchmark after temporary dependency fix
+        shell: bash
+        env:
+          API_ANYTHING_HOME: ${{ runner.temp }}/jcs-phase3-private
+        run: |
+          set -euo pipefail
+          mkdir -p "$API_ANYTHING_HOME"
+          chmod 700 "$API_ANYTHING_HOME"
+          cp pilot/bench-v2.mjs "$RUNNER_TEMP/api-anything-src/bench-v2.mjs"
+          cd "$RUNNER_TEMP/api-anything-src"
+          node bench-v2.mjs
