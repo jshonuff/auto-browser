@@ -1,0 +1,63 @@
+name: JC-SAVAGE API Anything Phase 2
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-api-anything-readonly-phase2.yml
+permissions:
+  contents: read
+jobs:
+  phase2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PIN: '20cb677039fcfe92d3d9c777aa9362e30ff1fdb8'
+      JCS_PRODUCTION_DISPATCH: 'false'
+      JCS_SUPABASE_WRITE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.16.0'
+      - name: Pin source and enforce public read-only operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --no-checkout https://github.com/goodnight000/api-anything.git "$RUNNER_TEMP/api-anything-src"
+          cd "$RUNNER_TEMP/api-anything-src"
+          git checkout --quiet "$PIN"
+          test "$(git rev-parse HEAD)" = "$PIN"
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const s=JSON.parse(fs.readFileSync('sites/hacker-news.json','utf8'));
+          const op=s.operations.find(o=>o.name==='frontPage');
+          if(!op||op.request.method!=='GET'||op.request.url!=='https://news.ycombinator.com/'||op.learnedLoggedIn||!op.readOnly||op.minTier!==1||op.slots.length)process.exit(1);
+          NODE
+          npm ci --ignore-scripts --no-fund --no-audit
+          ./node_modules/.bin/tsc -p tsconfig.build.json
+      - name: Examine published runtime advisories
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/api-anything-src"
+          npm audit --omit=dev --json > "$RUNNER_TEMP/jcs-npm-audit.json" || true
+          node - <<'NODE'
+          const x=require(process.env.RUNNER_TEMP+'/jcs-npm-audit.json');
+          const vulnerabilities=Object.entries(x.vulnerabilities||{}).map(([name,v])=>({
+            name, severity:v.severity, direct:v.isDirect, via:(v.via||[]).filter(k=>typeof k==='object').map(k=>({name:k.name,title:k.title,url:k.url,range:k.range})),
+            fixAvailable:v.fixAvailable, range:v.range
+          }));
+          console.log('JCS_PHASE2_AUDIT '+JSON.stringify({totals:x.metadata?.vulnerabilities, vulnerabilities, error:x.error?.code||null}));
+          NODE
+      - name: Execute warm library and browser comparative test
+        shell: bash
+        env:
+          API_ANYTHING_HOME: ${{ runner.temp }}/jcs-phase2-private
+        run: |
+          set -euo pipefail
+          mkdir -p "$API_ANYTHING_HOME"
+          chmod 700 "$API_ANYTHING_HOME"
+          cp pilot/bench-v2.mjs "$RUNNER_TEMP/api-anything-src/bench-v2.mjs"
+          cd "$RUNNER_TEMP/api-anything-src"
+          node bench-v2.mjs
