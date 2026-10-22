@@ -1,0 +1,20 @@
+name: JC-SAVAGE Candidate Intake Edge Compile Only
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-candidate-edge-compile.yml
+permissions:
+  contents: read
+jobs:
+  typecheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.5.6
+      - name: Type-check candidate receiver without deployment or credentials
+        run: deno check pilot/candidate-edge-jcs-api-anything-intake.ts
