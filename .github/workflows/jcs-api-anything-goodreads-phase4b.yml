@@ -39,7 +39,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           test "$(node -p "require('./package-lock.json').packages['node_modules/hono'].version")" = '4.13.11'
           ./node_modules/.bin/tsc -p tsconfig.build.json
-      - name: Public Goodreads three-path comparison
+      - name: Public Goodreads direct GET comparison, no browser retry
         env:
           API_ANYTHING_HOME: ${{ runner.temp }}/jcs-goodreads-ephemeral
         shell: bash
@@ -49,4 +49,4 @@ jobs:
           chmod 700 "$API_ANYTHING_HOME"
           cp pilot/goodreads-phase4b.mjs "$RUNNER_TEMP/api-anything-src/goodreads-phase4b.mjs"
           cd "$RUNNER_TEMP/api-anything-src"
-          node goodreads-phase4.mjs
+          node goodreads-phase4b.mjs
