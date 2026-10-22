@@ -1,0 +1,33 @@
+name: JC-SAVAGE Phase 7 MUNCHER-X Synthetic Contract
+on:
+  push:
+    branches:
+      - jc-savage/pilot-api-anything-20261021
+    paths:
+      - .github/workflows/jcs-api-anything-muncher-phase7.yml
+permissions:
+  contents: read
+jobs:
+  muncher-synthetic:
+    name: In-memory MUNCHER-X handoff regression (zero network / zero writes)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      JCS_PRODUCTION_DISPATCH: 'false'
+      JCS_SUPABASE_WRITE_ENABLED: 'false'
+      JCS_MUNCHER_REAL_FUNCTION_EXECUTION: 'false'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.16.0'
+      - name: Verify guardrails and run synthetic intake tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$JCS_PRODUCTION_DISPATCH" = 'false'
+          test "$JCS_SUPABASE_WRITE_ENABLED" = 'false'
+          test "$JCS_MUNCHER_REAL_FUNCTION_EXECUTION" = 'false'
+          test -z "${SUPABASE_SERVICE_ROLE_KEY:-}"
+          test -z "${JCS_SUPABASE_URL:-}"
+          node --test pilot/muncher-phase7-synthetic-handoff.test.mjs
